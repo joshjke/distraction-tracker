@@ -4,13 +4,262 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Distraction Tracker</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+    </style>
 </head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel" src="app.js"></script>
+<body class="min-h-screen bg-gray-50 py-8">
+    <div class="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Distraction Tracker</h1>
+        
+        <!-- Counters -->
+        <div class="text-center mb-6">
+            <div class="text-lg font-bold mb-1">Distractions: <span id="distractionCount">0</span></div>
+            <div class="text-md font-bold text-green-600 mb-1">Closed: <span id="closedCount">0</span></div>
+            <div class="text-md font-bold text-purple-600">Flow States: <span id="flowCount">0</span></div>
+        </div>
+
+        <!-- Distraction Section -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Why do you want to get distracted?
+            </label>
+            <input
+                type="text"
+                id="reasonInput"
+                placeholder="e.g., bored, stressed, avoiding difficult task..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 mb-3"
+            />
+            <button
+                id="distractionBtn"
+                class="w-full bg-red-300 hover:bg-red-400 text-gray-800 font-medium py-3 px-4 rounded-md transition-colors"
+            >
+                I Want to Open a Distraction
+            </button>
+        </div>
+
+        <button
+            id="closedBtn"
+            class="w-full bg-green-300 hover:bg-green-400 text-gray-800 font-medium py-3 px-4 rounded-md mb-6 transition-colors"
+        >
+            I Closed a Distraction
+        </button>
+
+        <!-- Flow State Section -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                What's helping you stay focused?
+            </label>
+            <input
+                type="text"
+                id="flowReasonInput"
+                placeholder="e.g., ate the frog, organized tasks, clear directions..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3"
+            />
+            <button
+                id="flowBtn"
+                class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-md transition-colors"
+            >
+                I'm in Flow State / Doing Great!
+            </button>
+        </div>
+
+        <!-- Timer Info -->
+        <div class="mb-6 text-sm">
+            <div class="mb-1">Time since last click: <span id="timeSinceClick">--</span></div>
+            <div class="mb-3" id="timeSinceBreakDiv">Time since last break: <span id="timeSinceBreak">--</span></div>
+            <button
+                id="breakBtn"
+                class="bg-blue-300 hover:bg-blue-400 text-gray-800 font-medium py-2 px-4 rounded-md transition-colors"
+            >
+                I Took a Break
+            </button>
+        </div>
+
+        <!-- Stats and Download -->
+        <div class="border-t pt-4">
+            <div class="text-sm text-gray-600 mb-4">
+                <div>Success Rate: <span id="successRate">0.0</span>%</div>
+                <div>Flow Rate: <span id="flowRate">0.0</span>%</div>
+                <div>Total Entries: <span id="totalEntries">0</span></div>
+            </div>
+            
+            <button
+                id="downloadBtn"
+                class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-md font-medium transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                disabled
+            >
+                Download Data (CSV)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let distractionCount = 0;
+        let closedDistractionCount = 0;
+        let flowStateCount = 0;
+        let lastClickTime = new Date();
+        let lastBreakTime = new Date();
+        let sessionData = [];
+
+        // DOM elements
+        const elements = {
+            distractionCount: document.getElementById('distractionCount'),
+            closedCount: document.getElementById('closedCount'),
+            flowCount: document.getElementById('flowCount'),
+            reasonInput: document.getElementById('reasonInput'),
+            flowReasonInput: document.getElementById('flowReasonInput'),
+            timeSinceClick: document.getElementById('timeSinceClick'),
+            timeSinceBreak: document.getElementById('timeSinceBreak'),
+            timeSinceBreakDiv: document.getElementById('timeSinceBreakDiv'),
+            successRate: document.getElementById('successRate'),
+            flowRate: document.getElementById('flowRate'),
+            totalEntries: document.getElementById('totalEntries'),
+            downloadBtn: document.getElementById('downloadBtn')
+        };
+
+        // Format time span
+        function formatTimeSpan(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            if (hours >= 1) {
+                return `${hours}h ${minutes}m ${seconds}s`;
+            } else if (minutes >= 1) {
+                return `${minutes}m ${seconds}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        }
+
+        // Log data entry
+        function logToData(eventType, reason = '') {
+            const now = new Date();
+            const timeSinceClickMinutes = (now - lastClickTime) / (1000 * 60);
+            const timeSinceBreakMinutes = (now - lastBreakTime) / (1000 * 60);
+            
+            const entry = {
+                timestamp: now.toISOString(),
+                event: eventType,
+                distractionCount,
+                closedDistractionCount,
+                flowStateCount,
+                timeSinceLastClick: timeSinceClickMinutes.toFixed(2),
+                timeSinceLastBreak: timeSinceBreakMinutes.toFixed(2),
+                reason: reason || 'No reason provided'
+            };
+
+            sessionData.push(entry);
+            updateStats();
+        }
+
+        // Update statistics display
+        function updateStats() {
+            elements.totalEntries.textContent = sessionData.length;
+            
+            const successRate = closedDistractionCount > 0 ? 
+                (closedDistractionCount * 100.0 / (distractionCount + closedDistractionCount)).toFixed(1) : '0.0';
+            
+            const flowRate = (flowStateCount + closedDistractionCount) > 0 ? 
+                ((flowStateCount + closedDistractionCount) * 100.0 / (distractionCount + closedDistractionCount + flowStateCount)).toFixed(1) : '0.0';
+
+            elements.successRate.textContent = successRate;
+            elements.flowRate.textContent = flowRate;
+            elements.downloadBtn.disabled = sessionData.length === 0;
+        }
+
+        // Update timers
+        function updateTimers() {
+            const now = new Date();
+            const clickDiff = now - lastClickTime;
+            const breakDiff = now - lastBreakTime;
+
+            elements.timeSinceClick.textContent = formatTimeSpan(clickDiff);
+            elements.timeSinceBreak.textContent = formatTimeSpan(breakDiff);
+
+            // Highlight break timer if 30+ minutes
+            if (breakDiff >= 30 * 60 * 1000) {
+                elements.timeSinceBreakDiv.className = 'mb-3 text-green-600 font-bold';
+            } else {
+                elements.timeSinceBreakDiv.className = 'mb-3';
+            }
+        }
+
+        // Event handlers
+        document.getElementById('distractionBtn').addEventListener('click', () => {
+            distractionCount++;
+            elements.distractionCount.textContent = distractionCount;
+            
+            const reason = elements.reasonInput.value.trim() || 'No reason provided';
+            logToData('Distraction', reason);
+            
+            lastClickTime = new Date();
+            elements.reasonInput.value = '';
+            
+            alert('Stay focused! You\'ve got this! 💪');
+        });
+
+        document.getElementById('closedBtn').addEventListener('click', () => {
+            closedDistractionCount++;
+            elements.closedCount.textContent = closedDistractionCount;
+            
+            logToData('ClosedDistraction', 'Closed distraction');
+            
+            lastClickTime = new Date();
+            
+            alert('Great job! You\'re building strong focus habits! 🎯');
+        });
+
+        document.getElementById('flowBtn').addEventListener('click', () => {
+            flowStateCount++;
+            elements.flowCount.textContent = flowStateCount;
+            
+            const reason = elements.flowReasonInput.value.trim() || 'In flow state';
+            logToData('FlowState', reason);
+            
+            lastClickTime = new Date();
+            elements.flowReasonInput.value = '';
+            
+            alert('Awesome! You\'re crushing it! Keep up the great work! 🚀');
+        });
+
+        document.getElementById('breakBtn').addEventListener('click', () => {
+            logToData('Break', 'Took a break');
+            lastBreakTime = new Date();
+            
+            alert('Great! Taking breaks is important for productivity.');
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const headers = 'Timestamp,Event,DistractionCount,ClosedDistractionCount,FlowStateCount,TimeSinceLastClick(minutes),TimeSinceLastBreak(minutes),Reason';
+            const csvContent = [
+                headers,
+                ...sessionData.map(row => 
+                    `${row.timestamp},${row.event},${row.distractionCount},${row.closedDistractionCount},${row.flowStateCount},${row.timeSinceLastClick},${row.timeSinceLastBreak},"${row.reason}"`
+                )
+            ].join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'DistractionTracker.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        });
+
+        // Start timer updates
+        setInterval(updateTimers, 1000);
+        updateTimers();
+        updateStats();
+    </script>
 </body>
 </html>
